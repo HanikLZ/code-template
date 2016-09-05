@@ -70,7 +70,7 @@ class Template internal constructor(val templateName : String) {
                         val group = group()
                         lineWithoutContent = group.length == line.length
                         val command = splitter.apply { string = group.expression() }.next().run { substring(indexOf(':') + 1) }
-                        append(when (command) {
+                        val childContent = when (command) {
                             "file" -> processFileBlock(group, splitter.resetString().trim(), varMap, targetFile)
                             "repeat" -> processRepeatBlock(group, splitter.toList(), varMap, targetFile)
                             "if" -> {
@@ -85,6 +85,12 @@ class Template internal constructor(val templateName : String) {
                                 if (!shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile) else emptyString
                             }
                             else -> emptyString
+                        }
+                        // 去除子代码块的换行
+                        append(if (lastEnd != line.length && childContent.endsWith(lineWrap)) {
+                            childContent.substring(0, childContent.length - lineWrap.length)
+                        } else {
+                            childContent
                         })
                     }
                 }
