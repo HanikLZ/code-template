@@ -145,8 +145,9 @@ internal object ExpressionUtil {
         var matchedPriority = 0
         var functionStart = false
         var functionInnerBracketStart = false
+        var stringStartChar: Char? = null
 
-        fun test(index: Int?, ch: Char) {
+        fun testOperator(index: Int?, ch: Char) {
             if (index == null) {
                 val builder = if (matchedPriority != 0) {
                     val operator = operatorBuilder.substring(0, operatorBuilder.length - 1)
@@ -164,7 +165,7 @@ internal object ExpressionUtil {
                 operatorBuilder.clear()
                 builder.append(ch)
                 if (builder == operatorBuilder) {
-                    test(operatorPriorityMap[operatorBuilder.toString()], ch)
+                    testOperator(operatorPriorityMap[operatorBuilder.toString()], ch)
                 }
             } else if (varBuilder.isNotEmpty() && ch == '(') { // 函数开始
                 functionStart = true
@@ -199,32 +200,42 @@ internal object ExpressionUtil {
             }
         }
 
-        expression.filter { it != ' ' }.forEach {
-            if (functionStart) {
-                if (it == ')' && !functionInnerBracketStart) {
-                    functionSplitter.string = functionBuilder.toString().trim()
-                    while (functionSplitter.hasNext()) {
-                        varBuilder.append(processExpression(functionSplitter.next().trim())).append(',')
-                    }
-                    if (varBuilder.endsWith(',')) {
-                        varBuilder.setCharAt(varBuilder.length - 1, it)
-                    } else {
-                        varBuilder.append(it)
-                    }
-                    outputBuilder.push(varBuilder.toString())
-                    varBuilder.setLength(0)
-                    functionBuilder.setLength(0)
-                    functionStart = false
-                } else {
-                    functionInnerBracketStart = when (it) {
-                        '(' -> true
-                        ')' -> false
-                        else -> functionInnerBracketStart
-                    }
-                    functionBuilder.append(it)
+        expression.forEach {
+            if (stringStartChar != null) {
+                varBuilder.append(it)
+                if (stringStartChar == it) {
+                    stringStartChar = null
                 }
-            } else {
-                test(operatorPriorityMap[operatorBuilder.append(it).toString()], it)
+            } else if (it != ' ') {
+                if (functionStart) {
+                    if (it == ')' && !functionInnerBracketStart) {
+                        functionSplitter.string = functionBuilder.toString().trim()
+                        while (functionSplitter.hasNext()) {
+                            varBuilder.append(processExpression(functionSplitter.next().trim())).append(',')
+                        }
+                        if (varBuilder.endsWith(',')) {
+                            varBuilder.setCharAt(varBuilder.length - 1, it)
+                        } else {
+                            varBuilder.append(it)
+                        }
+                        outputBuilder.push(varBuilder.toString())
+                        varBuilder.clear()
+                        functionBuilder.clear()
+                        functionStart = false
+                    } else {
+                        functionInnerBracketStart = when (it) {
+                            '(' -> true
+                            ')' -> false
+                            else -> functionInnerBracketStart
+                        }
+                        functionBuilder.append(it)
+                    }
+                } else {
+                    if (it == '\'' || it == '\"') {
+                        stringStartChar = it
+                    }
+                    testOperator(operatorPriorityMap[operatorBuilder.append(it).toString()], it)
+                }
             }
         }
         if (varBuilder.isNotEmpty()) {

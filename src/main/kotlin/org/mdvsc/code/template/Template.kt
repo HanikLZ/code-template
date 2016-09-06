@@ -152,7 +152,7 @@ class Template internal constructor(val templateName : String) {
             if (file.absolutePath == targetFile.absolutePath) {
                 content
             } else if (content.isNotEmpty()) {
-                file.writeText(content)
+                file.apply { if (parentFile != null) parentFile.mkdirs() }.writeText(content)
                 emptyString
             } else {
                 emptyString
@@ -195,7 +195,8 @@ class Template internal constructor(val templateName : String) {
     @JvmOverloads fun writeToPath(path: File = File(templateName)) {
         val content = genContent(baseCodeList, HashMap<String, String>(), path)
         if (content.isNotBlank()) {
-            (if (path.isDirectory) File(path, templateName) else path).writeText(content)
+            (if (path.isDirectory) File(path.apply { mkdirs() }, templateName) else path.apply { if (parentFile != null) parentFile.mkdirs() })
+                    .writeText(content)
         }
     }
 }

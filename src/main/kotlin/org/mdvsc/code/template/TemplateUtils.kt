@@ -8,13 +8,14 @@ import java.util.regex.Pattern
  */
 internal val controlPattern = Pattern.compile("!\\{.*?}")!!
 internal val expressionPattern = Pattern.compile("#\\{.*?}")!!
+internal val stringPattern = Pattern.compile("'[^.]*'|\"[^\"]*\"")!!
 
 /**
  * 提取模板标签中的表达式字符串
  */
 internal fun String.expression() = substring(2, length - 1)
 internal fun String.pair(split: String = "=") = indexOf(split).run { if (this > 0) Pair(substring(0, this).trim(), substring(this + split.length).trim()) else Pair("", this@pair)}
-internal fun String.isStringValue() = first() == '"' && last() == '"'
+internal fun String.isStringValue() = stringPattern.matcher(this).matches()
 internal fun String.stringValue() = if (isStringValue()) substring(1, length - 1) else this
 internal fun StringSplitter.toList() = ArrayList<String>().apply { while (hasNext()) {add(next())} }
 
