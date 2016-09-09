@@ -144,7 +144,7 @@ internal object ExpressionUtil {
 
         var matchedPriority = 0
         var functionStart = false
-        var functionInnerBracketStart = false
+        var functionInnerBracketCount = 0
         var stringStartChar: Char? = null
 
         fun testOperator(index: Int?, ch: Char) {
@@ -208,7 +208,7 @@ internal object ExpressionUtil {
                 }
             } else if (it != ' ') {
                 if (functionStart) {
-                    if (it == ')' && !functionInnerBracketStart) {
+                    if (it == ')' && --functionInnerBracketCount <= 0) {
                         functionSplitter.string = functionBuilder.toString().trim()
                         while (functionSplitter.hasNext()) {
                             varBuilder.append(processExpression(functionSplitter.next().trim())).append(',')
@@ -223,10 +223,8 @@ internal object ExpressionUtil {
                         functionBuilder.clear()
                         functionStart = false
                     } else {
-                        functionInnerBracketStart = when (it) {
-                            '(' -> true
-                            ')' -> false
-                            else -> functionInnerBracketStart
+                        if (it == '(') {
+                            functionInnerBracketCount++
                         }
                         functionBuilder.append(it)
                     }
