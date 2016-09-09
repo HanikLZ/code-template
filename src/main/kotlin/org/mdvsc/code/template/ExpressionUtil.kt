@@ -208,6 +208,7 @@ internal object ExpressionUtil {
                 }
             } else if (it != ' ') {
                 if (functionStart) {
+                    functionBuilder.append(it)
                     if (it == ')' && --functionInnerBracketCount <= 0) {
                         functionSplitter.string = functionBuilder.toString().trim()
                         while (functionSplitter.hasNext()) {
@@ -222,11 +223,8 @@ internal object ExpressionUtil {
                         varBuilder.clear()
                         functionBuilder.clear()
                         functionStart = false
-                    } else {
-                        if (it == '(') {
-                            functionInnerBracketCount++
-                        }
-                        functionBuilder.append(it)
+                    } else if (it == '(') {
+                        functionInnerBracketCount++
                     }
                 } else {
                     if (it == '\'' || it == '\"') {
