@@ -143,6 +143,7 @@ internal object ExpressionUtil {
         var functionBracketCount = 0
         var matchedPriority: Int = 0
         var stringStartChar: Char? = null
+        var lastChar: Char = ' '
 
         fun pushOperatorPriority() {
             while (operatorStack.isNotEmpty() && operatorStack.peek().second >= matchedPriority) {
@@ -159,18 +160,17 @@ internal object ExpressionUtil {
                 if (matchedPriority != 0) {
                     operatorBuilder.setLength(operatorBuilder.length - 1)
                     pushOperatorPriority()
-                } else if (operatorBuilder.length == 1) {
-                    operatorBuilder.clear()
+                } else if (operatorBuilder.run {
+                    val notOperator = length == 1
+                    clear()
+                    notOperator
+                }) {
                     varBuilder.append(it)
-                    if (it == '\'' || it == '\"') {
-                        stringStartChar = it
-                    }
                 } else {
-                    operatorBuilder.clear()
                     testOperator(it)
                 }
             } else {
-                when (it) {
+                if (when (it) { // 处理特殊符号
                     '(' -> {
                         if (varBuilder.isNotBlank()) { // 函数开始
                             functionParamCount = 0
@@ -180,6 +180,7 @@ internal object ExpressionUtil {
                         } else {
                             operatorStack.push(it.toString(), priority)
                         }
+                        true
                     }
                     ')' -> {
                         while (operatorStack.isNotEmpty()) {
@@ -189,8 +190,10 @@ internal object ExpressionUtil {
                             }
                             outputBuilder.push(o.first)
                         }
+                        true
                     }
-                }
+                    else -> false
+                }) operatorBuilder.clear()
                 if (varBuilder.isNotEmpty()) {
                     outputBuilder.push(varBuilder.toString())
                     varBuilder.clear()
@@ -201,9 +204,11 @@ internal object ExpressionUtil {
 
         expression.forEach {
             if (stringStartChar != null) {
-                varBuilder.append(it)
-                if (stringStartChar == it) {
-                    stringStartChar = null
+                if (it != '\\') {
+                    varBuilder.append(it)
+                    if (lastChar != '\\' && stringStartChar == it) {
+                        stringStartChar = null
+                    }
                 }
             } else if (functionBracketCount > 0) {
                 if (it == ')' && --functionBracketCount == 0 || (it == ',' && functionBracketCount == 1)) {
@@ -221,11 +226,18 @@ internal object ExpressionUtil {
                     }
                     functionParamBuilder.append(it)
                 }
+            } else if (lastChar != '\\' && (it == '\'' || it == '\"')) {
+                stringStartChar = it
+                varBuilder.append(it)
+                if (operatorBuilder.isNotEmpty()) {
+                    pushOperatorPriority()
+                }
             } else if (it != ' ') {
                 testOperator(it)
             } else if (operatorBuilder.isNotEmpty()) {
                 pushOperatorPriority()
             }
+            lastChar = it
         }
 
         if (varBuilder.isNotEmpty()) {

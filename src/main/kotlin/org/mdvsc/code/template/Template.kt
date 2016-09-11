@@ -192,11 +192,11 @@ class Template internal constructor(val templateName : String) {
         return contentBuilder.toString()
     }
 
-    @JvmOverloads fun writeToPath(path: File = File(templateName)) {
+    fun writeToPath(path: File) {
         val content = genContent(baseCodeList, HashMap<String, String>(), path)
         if (content.isNotBlank()) {
-            (if (path.isDirectory) File(path.apply { mkdirs() }, templateName) else path.apply { if (parentFile != null) parentFile.mkdirs() })
-                    .writeText(content)
+            val outFile = if (path.isFile) path else File(path.apply { mkdirs() }, "${File(templateName).name}.out")
+            outFile.writeText(content)
         }
     }
 }
