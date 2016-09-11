@@ -100,16 +100,16 @@ internal object ExpressionUtil {
         else -> ""
     }
 
-    fun computeFunction(expression: String, functionProcessor: FunctionProcessor, variableProcessor: VariableProcessor) = expression.run {
-        val funSplitter = StringSplitter(',')
-        val argList = ArrayList<String>()
-        val index = indexOf('(')
-        val funName = substring(0, index).trim()
-        funSplitter.string = substring(index + 1, lastIndexOf(')'))
-        while (funSplitter.hasNext()) {
-            argList.add(getExpressionValue(funSplitter.next().trim(), functionProcessor, variableProcessor))
+    private fun computeFunction(expression: String, vars: Stack<String>, functionProcessor: FunctionProcessor) = expression.run {
+        // 函数操作符形式为 函数名(参数数量)
+        var firstBracketIndex = expression.indexOf('(')
+        val funName = expression.substring(0, firstBracketIndex++)
+        var paramCount = expression.run { substring(firstBracketIndex, lastIndexOf(')')).toInt() }
+        val paramList = ArrayList<String>(paramCount)
+        while (paramCount-- > 0) {
+            paramList.add(vars.pop())
         }
-        functionProcessor.processFunction(funName, argList) ?: ""
+        functionProcessor.processFunction(funName, paramList) ?: ""
     }
 
     fun getExpressionValue(expression: String, functionProcessor: FunctionProcessor, variableProcessor: VariableProcessor): String {
@@ -120,7 +120,7 @@ internal object ExpressionUtil {
                 if (isOperator()) {
                     computeExpression(this, varStack)
                 } else if (isFunction()) {
-                    computeFunction(this, functionProcessor, variableProcessor)
+                    computeFunction(this, varStack, functionProcessor)
                 } else if (isStringValue()) {
                     stringValue()
                 } else {
@@ -132,55 +132,54 @@ internal object ExpressionUtil {
     }
 
     fun processExpression(expression: String): String {
-
         val operatorStack = Stack<Pair<String, Int>>()
-
         val outputBuilder = StringBuilder()
-
         val varBuilder = StringBuilder()
         val operatorBuilder = StringBuilder()
-        val functionBuilder = StringBuilder()
-        val functionSplitter = StringSplitter(',')
+        val functionParamBuilder = StringBuilder()
 
-        var matchedPriority = 0
-        var functionStart = false
-        var functionInnerBracketCount = 0
+        var functionName = ""
+        var functionParamCount = 0
+        var functionBracketCount = 0
+        var matchedPriority: Int = 0
         var stringStartChar: Char? = null
 
-        fun testOperator(index: Int?, ch: Char) {
-            if (index == null) {
-                val builder = if (matchedPriority != 0) {
-                    val operator = operatorBuilder.substring(0, operatorBuilder.length - 1)
-                    while (operatorStack.isNotEmpty() && operatorStack.peek().second >= matchedPriority) {
-                        outputBuilder.push(operatorStack.pop().first)
-                    }
-                    operatorStack.push(operator, matchedPriority)
-                    matchedPriority = 0
-                    operatorBuilder
+        fun pushOperatorPriority() {
+            while (operatorStack.isNotEmpty() && operatorStack.peek().second >= matchedPriority) {
+                outputBuilder.push(operatorStack.pop().first)
+            }
+            operatorStack.push(operatorBuilder.toString(), matchedPriority)
+            operatorBuilder.clear()
+            matchedPriority = 0
+        }
+
+        fun testOperator(it: Char) {
+            val priority = operatorPriorityMap[operatorBuilder.append(it).toString()]
+            if (priority == null) {
+                if (matchedPriority != 0) {
+                    operatorBuilder.setLength(operatorBuilder.length - 1)
+                    pushOperatorPriority()
                 } else if (operatorBuilder.length == 1) {
-                    varBuilder
+                    operatorBuilder.clear()
+                    varBuilder.append(it)
+                    if (it == '\'' || it == '\"') {
+                        stringStartChar = it
+                    }
                 } else {
-                    operatorBuilder
+                    operatorBuilder.clear()
+                    testOperator(it)
                 }
-                operatorBuilder.clear()
-                builder.append(ch)
-                if (builder == operatorBuilder) {
-                    testOperator(operatorPriorityMap[operatorBuilder.toString()], ch)
-                }
-            } else if (varBuilder.isNotEmpty() && ch == '(') { // 函数开始
-                functionStart = true
-                varBuilder.append(ch)
-                operatorBuilder.clear()
             } else {
-                matchedPriority = index
-                if (varBuilder.isNotEmpty()) {
-                    outputBuilder.push(varBuilder.toString())
-                    varBuilder.clear()
-                }
-                if (when (ch) {
+                when (it) {
                     '(' -> {
-                        operatorStack.push(operatorBuilder.toString(), index)
-                        true
+                        if (varBuilder.isNotBlank()) { // 函数开始
+                            functionParamCount = 0
+                            functionBracketCount = 1
+                            functionName = varBuilder.toString().trim()
+                            varBuilder.clear()
+                        } else {
+                            operatorStack.push(it.toString(), priority)
+                        }
                     }
                     ')' -> {
                         while (operatorStack.isNotEmpty()) {
@@ -190,13 +189,13 @@ internal object ExpressionUtil {
                             }
                             outputBuilder.push(o.first)
                         }
-                        true
                     }
-                    else -> false
-                }) {
-                    operatorBuilder.clear()
-                    matchedPriority = 0
                 }
+                if (varBuilder.isNotEmpty()) {
+                    outputBuilder.push(varBuilder.toString())
+                    varBuilder.clear()
+                }
+                matchedPriority = priority
             }
         }
 
@@ -206,40 +205,37 @@ internal object ExpressionUtil {
                 if (stringStartChar == it) {
                     stringStartChar = null
                 }
-            } else if (it != ' ') {
-                if (functionStart) {
-                    functionBuilder.append(it)
-                    if (it == ')' && --functionInnerBracketCount <= 0) {
-                        functionSplitter.string = functionBuilder.toString().trim()
-                        while (functionSplitter.hasNext()) {
-                            varBuilder.append(processExpression(functionSplitter.next().trim())).append(',')
-                        }
-                        if (varBuilder.endsWith(',')) {
-                            varBuilder.setCharAt(varBuilder.length - 1, it)
-                        } else {
-                            varBuilder.append(it)
-                        }
-                        outputBuilder.push(varBuilder.toString())
-                        varBuilder.clear()
-                        functionBuilder.clear()
-                        functionStart = false
-                    } else if (it == '(') {
-                        functionInnerBracketCount++
+            } else if (functionBracketCount > 0) {
+                if (it == ')' && --functionBracketCount == 0 || (it == ',' && functionBracketCount == 1)) {
+                    if (functionParamBuilder.isNotBlank()) {
+                        functionParamCount++
+                        outputBuilder.push(processExpression(functionParamBuilder.toString().trim()))
                     }
+                    if (functionBracketCount < 1) { // 函数结束
+                        outputBuilder.push("$functionName($functionParamCount)")
+                    }
+                    functionParamBuilder.clear()
                 } else {
-                    if (it == '\'' || it == '\"') {
-                        stringStartChar = it
+                    if (it == '(') {
+                        functionBracketCount++
                     }
-                    testOperator(operatorPriorityMap[operatorBuilder.append(it).toString()], it)
+                    functionParamBuilder.append(it)
                 }
+            } else if (it != ' ') {
+                testOperator(it)
+            } else if (operatorBuilder.isNotEmpty()) {
+                pushOperatorPriority()
             }
         }
+
         if (varBuilder.isNotEmpty()) {
             outputBuilder.push(varBuilder.toString())
         }
+
         while (operatorStack.isNotEmpty()) {
             outputBuilder.push(operatorStack.pop().first)
         }
+
         return outputBuilder.toString().trim()
     }
 }
