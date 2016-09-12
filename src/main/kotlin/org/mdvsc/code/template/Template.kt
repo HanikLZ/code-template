@@ -115,13 +115,17 @@ class Template internal constructor(val templateName : String) {
     private fun processExpression(expression: String, varMap: Map<String, String>)
             = ExpressionUtil.getExpressionValue(expression, functionProcessorWrapper, mappedVariableProcessor(varMap))
 
-    private fun mappedVariable(variable: String, varMap: Map<String, String>) = variable.lastIndexOf('.').run {
-        if (this > 0) {
-            val prefix = variable.substring(0, this)
-            (varMap[prefix] ?: prefix) + variable.substring(this)
-        } else {
-            varMap[variable] ?: variable
+    private fun mappedVariable(variable: String, varMap: Map<String, String>): String {
+        val varBuilder = StringBuilder()
+        val splitter = StringSplitter('.').apply { string = variable }
+        while (splitter.hasNext()) {
+            val v = splitter.next()
+            varBuilder.append(varMap[v]?:v).append('.')
         }
+        if (varBuilder.isNotEmpty()) {
+            varBuilder.setLength(varBuilder.length - 1)
+        }
+        return varBuilder.toString()
     }
 
     private fun mappedVariableProcessor(varMap: Map<String, String>) = if (varMap.isNotEmpty()) {
