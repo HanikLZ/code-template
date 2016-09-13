@@ -221,11 +221,9 @@ class Template internal constructor(val templateName : String) {
             } else {
                 processor.processVariable(str) ?: str
             }
-            openStr = processStr(openStr)
-            closeStr = processStr(closeStr)
-            separatorStr = processStr(separatorStr)
+            separatorStr = if (separatorStr.isNotEmpty()) processStr(separatorStr) else separatorStr
             if (openStr.isNotEmpty()) {
-                contentBuilder.append(openStr)
+                contentBuilder.append(processStr(openStr))
             }
             val collection = processor.processKeyCollection(collectionStr) ?: emptyList()
             val oldIndex = varMap[indexStr]
@@ -252,7 +250,7 @@ class Template internal constructor(val templateName : String) {
                 contentBuilder.setLength(contentBuilder.length - separatorStr.length)
             }
             if (closeStr.isNotEmpty()) {
-                contentBuilder.append(closeStr)
+                contentBuilder.append(processStr(closeStr))
             }
         }
         return contentBuilder.toString()
