@@ -107,8 +107,8 @@ class Template internal constructor(val templateName : String) {
      * 条件表达式的输出为boolean类型，要求每个条件均为boolean类型输出
      * 逻辑运算优先级别为 !, &&、||
      */
-    private fun processBooleanExpression(expression: String, varMap: Map<String, String>): Boolean {
-        return try {processExpression(expression, varMap).toBoolean()} catch (e: Exception) {false}
+    private fun processBooleanExpression(expression: String, varMap: Map<String, String>) = processExpression(expression, varMap).trim().run {
+        isNotEmpty() && this != "0" && !this.equals("false", true)
     }
 
     private fun processExpression(expression: String, varMap: Map<String, String>)
