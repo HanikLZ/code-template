@@ -14,17 +14,16 @@ internal val stringPattern = Pattern.compile("'[^.]*'|\"[^\"]*\"")!!
  * 提取模板标签中的表达式字符串
  */
 internal fun String.expression() = substring(2, length - 1)
-internal fun String.pair(split: String = "=") = indexOf(split).run { if (this > 0) Pair(substring(0, this).trim(), substring(this + split.length).trim()) else Pair("", this@pair)}
 internal fun String.isStringValue() = stringPattern.matcher(this).matches()
 internal fun String.stringValue() = if (isStringValue()) substring(1, length - 1) else this
-internal fun StringSplitter.toList() = ArrayList<String>().apply { while (hasNext()) {add(next())} }
-
+internal fun StringBuilder.clear() = setLength(0)
+internal fun StringBuilder.toTrimString() = toString().trim()
 
 /**
  * @author HanikLZ
  * @since 2016/8/29
  */
-internal class StringSplitter(val delimiter: Char): Iterable<String>, Iterator<String> {
+class StringSplitter(val delimiter: Char): Iterable<String>, Iterator<String> {
 
     private var position = 0
     private var length = 0
@@ -54,7 +53,7 @@ internal class StringSplitter(val delimiter: Char): Iterable<String>, Iterator<S
         return nextString
     }
 
-    fun resetString() = string.substring(position)
+    fun restString() = if (position >= 0 && position < string.length) string.substring(position) else string
 
 }
 

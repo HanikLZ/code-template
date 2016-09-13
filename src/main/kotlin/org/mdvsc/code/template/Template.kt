@@ -40,7 +40,7 @@ class Template internal constructor(val templateName : String) {
     var commandBlockSize = 0
         internal set
 
-    private fun genContent(codeList: List<String>, varMap: MutableMap<String, String>, targetFile: File): String {
+    private fun genContent(codeList: List<String>, varMap: MutableMap<String, String>, targetFile: File, endWithWrap: Boolean = true): String {
         val splitter = StringSplitter(' ')
         val builder = StringBuilder()
         val contentBuilder = StringBuilder()
@@ -70,28 +70,24 @@ class Template internal constructor(val templateName : String) {
                         val group = group()
                         lineWithoutContent = group.length == line.length
                         val command = splitter.apply { string = group.expression() }.next().run { substring(indexOf(':') + 1) }
+                        val body = splitter.restString().trim()
                         val childContent = when (command) {
-                            "file" -> processFileBlock(group, splitter.resetString().trim(), varMap, targetFile)
-                            "repeat" -> processRepeatBlock(group, splitter.toList(), varMap, targetFile)
+                            "file" -> processFileBlock(group, body, varMap, targetFile)
+                            "repeat" -> processRepeatBlock(group, body, varMap, targetFile)
                             "if" -> {
-                                shouldProcessIfBlock = processBooleanExpression(splitter.resetString(), varMap)
-                                if (shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile) else emptyString
+                                shouldProcessIfBlock = processBooleanExpression(body, varMap)
+                                if (shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile, false) else emptyString
                             }
                             "elif" -> {
-                                shouldProcessIfBlock = !shouldProcessIfBlock && processBooleanExpression(splitter.resetString(), varMap)
-                                if (shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile) else emptyString
+                                shouldProcessIfBlock = !shouldProcessIfBlock && processBooleanExpression(body, varMap)
+                                if (shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile, false) else emptyString
                             }
                             "else" -> {
-                                if (!shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile) else emptyString
+                                if (!shouldProcessIfBlock) genContent(blockMap[group] ?: emptyList(), varMap, targetFile, false) else emptyString
                             }
                             else -> emptyString
                         }
-                        // 去除子代码块的换行
-                        append(if (lastEnd != line.length && childContent.endsWith(lineWrap)) {
-                            childContent.substring(0, childContent.length - lineWrap.length)
-                        } else {
-                            childContent
-                        })
+                        append(childContent)
                     }
                 }
                 append(line.substring(lastEnd))
@@ -99,6 +95,9 @@ class Template internal constructor(val templateName : String) {
             if (!lineWithoutContent) {
                 contentBuilder.append(lineWrap)
             }
+        }
+        if (!endWithWrap && contentBuilder.endsWith(lineWrap)) { // 去除子代码块的换行
+            contentBuilder.setLength(contentBuilder.length - lineWrap.length)
         }
         return contentBuilder.toString()
     }
@@ -165,28 +164,95 @@ class Template internal constructor(val templateName : String) {
     /**
      * 处理循环语句块
      */
-    private fun processRepeatBlock(blockLabel: String, args: List<String>, varMap: MutableMap<String, String>, targetFile: File): String {
+    private fun processRepeatBlock(blockLabel: String, body: String, varMap: MutableMap<String, String>, targetFile: File): String {
         val contentBuilder = StringBuilder()
         val repeatBlock = blockMap[blockLabel]
         if (repeatBlock != null) {
             var collectionStr = ""
             var variableStr = ""
-            args.forEach {
-                it.pair().run {
-                    when (first) {
-                        "collection" -> collectionStr = second.stringValue()
-                        "var" -> variableStr = second.stringValue()
+            var indexStr = ":index"
+            var sizeStr = ":size"
+            var openStr = ""
+            var closeStr = ""
+            var separatorStr = ""
+
+            var stringStartChar:Char? = null
+            val first = StringBuilder()
+            val second = StringBuilder()
+            var builder = first
+
+            fun testParam() {
+                when (first.trim()) {
+                    "collection" -> collectionStr = second.toTrimString()
+                    "var" -> variableStr = second.toTrimString()
+                    "index" -> indexStr = second.toTrimString()
+                    "size" -> sizeStr = second.toTrimString()
+                    "open" -> openStr = second.toTrimString()
+                    "close" -> closeStr = second.toTrimString()
+                    "separator" -> separatorStr = second.toTrimString()
+                }
+                first.clear()
+                second.clear()
+            }
+
+            body.forEach {
+                when(it) {
+                    '\"', '\'' -> {
+                        if (stringStartChar == null) {
+                            stringStartChar = it
+                        } else if (stringStartChar == it) {
+                            stringStartChar = null
+                        }
+                        builder.append(it)
                     }
+                    '=' -> if (stringStartChar == null) { builder = second.apply { setLength(0) } } else builder.append(it)
+                    ' ' -> if (stringStartChar == null) {
+                        if (builder == second) { testParam() }
+                        builder = first.apply { clear() }
+                    } else builder.append(it)
+                    else -> builder.append(it)
                 }
             }
-            val collection = mappedVariableProcessor(varMap).processKeyCollection(collectionStr) ?: emptyList()
+            testParam()
+
+            val processor = mappedVariableProcessor(varMap)
+            fun processStr(str: String) = if (str.isStringValue()) {
+                str.stringValue()
+            } else {
+                processor.processVariable(str) ?: str
+            }
+            openStr = processStr(openStr)
+            closeStr = processStr(closeStr)
+            separatorStr = processStr(separatorStr)
+            if (openStr.isNotEmpty()) {
+                contentBuilder.append(openStr)
+            }
+            val collection = processor.processKeyCollection(collectionStr) ?: emptyList()
+            val oldIndex = varMap[indexStr]
+            val oldSize = varMap[sizeStr]
+            varMap[sizeStr] = collection.size.toString()
+            var index = 0
             for (v in collection) {
+                if (indexStr.isNotEmpty()) { varMap[indexStr] = index++.toString() }
                 val oldV = varMap[variableStr]
                 varMap[variableStr] = "${mappedVariable(collectionStr, varMap)}.$v"
-                contentBuilder.append(genContent(repeatBlock, varMap, targetFile))
+                contentBuilder.append(genContent(repeatBlock, varMap, targetFile, false))
                 if (oldV != null) {
                     varMap[variableStr] = oldV
                 }
+                contentBuilder.append(separatorStr)
+            }
+            if (oldIndex != null) {
+                varMap[indexStr] = oldIndex
+            }
+            if (oldSize != null) {
+                varMap[sizeStr] = oldSize
+            }
+            if (contentBuilder.isNotEmpty()) {
+                contentBuilder.setLength(contentBuilder.length - separatorStr.length)
+            }
+            if (closeStr.isNotEmpty()) {
+                contentBuilder.append(closeStr)
             }
         }
         return contentBuilder.toString()

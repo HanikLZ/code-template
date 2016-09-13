@@ -30,7 +30,6 @@ internal object ExpressionUtil {
     private val functionPattern = Pattern.compile("[^+\\-*/|&=<>!()\\s]+\\s*\\(.*\\)")!!
 
     private fun StringBuilder.push(arg: String) = append(arg).append(' ')
-    private fun StringBuilder.clear() = setLength(0)
     private fun Stack<Pair<String, Int>>.push(key: String, value: Int) = push(Pair(key, value))
     private fun Stack<String>.twoVarCompute(computer: (String, String) -> Any): String {
         val v2 = pop()
