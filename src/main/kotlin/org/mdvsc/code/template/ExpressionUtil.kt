@@ -108,7 +108,7 @@ internal object ExpressionUtil {
         while (paramCount-- > 0) {
             paramList.add(vars.pop())
         }
-        functionProcessor.processFunction(funName, paramList) ?: ""
+        functionProcessor.processFunction(funName, paramList.apply { reverse() }) ?: ""
     }
 
     fun getExpressionValue(expression: String, functionProcessor: FunctionProcessor, variableProcessor: VariableProcessor): String {
